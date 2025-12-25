@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guild Zone | User Dashboard</title>
+    <!-- Firebase SDK (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root { --bg: #0a0a0c; --card: #151518; --blue: #00d2ff; --red: #ff003c; --green: #00ff88; --dim: #a0a0a0; --white: #fff; --neon: 0 0 15px rgba(0, 210, 255, 0.2); }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Rajdhani', sans-serif; }
+        body { background: var(--bg); color: var(--white); overflow-x: hidden; }
+        h1, h2, h3 { font-family: 'Orbitron'; text-transform: uppercase; }
+
+        /* Auth Screen */
+        #auth-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .auth-box { background: var(--card); width: 92%; max-width: 400px; padding: 30px; border-radius: 12px; border: 1px solid #222; }
+        .auth-tabs { display: flex; margin-bottom: 20px; gap: 10px; }
+        .auth-tabs button { flex: 1; padding: 12px; background: transparent; border: 1px solid #333; color: #fff; cursor: pointer; border-radius: 4px; }
+        .auth-tabs button.active { border-color: var(--blue); color: var(--blue); box-shadow: inset 0 0 5px var(--blue); }
+
+        /* App Layout */
+        #app-shell { display: none; min-height: 100vh; }
+        .sidebar { width: 260px; height: 100vh; background: var(--card); position: fixed; border-right: 1px solid #222; padding: 20px; z-index: 100; transition: 0.3s; }
+        .nav-link { display: flex; align-items: center; gap: 15px; padding: 15px; color: var(--dim); text-decoration: none; border-radius: 8px; margin-bottom: 5px; cursor: pointer; transition: 0.3s; }
+        .nav-link:hover, .nav-link.active { background: #1a1a20; color: var(--blue); box-shadow: inset 3px 0 0 var(--blue); }
+        .main-content { margin-left: 260px; padding: 30px; min-height: 100vh; }
+
+        /* Header UI */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .header-actions { display: flex; align-items: center; gap: 15px; }
+        .coins-box { background: #000; padding: 10px 20px; border-radius: 30px; border: 1px solid var(--blue); color: var(--blue); font-weight: 700; display: flex; align-items: center; gap: 10px; box-shadow: var(--neon); }
+        .notif-btn { position: relative; width: 45px; height: 45px; background: #111; border: 1px solid #222; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--dim); }
+        .notif-badge { position: absolute; top: -2px; right: -2px; width: 18px; height: 18px; background: var(--red); border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 0.7rem; color: #fff; font-weight: bold; border: 2px solid var(--bg); }
+
+        /* Sections */
+        .section { display: none; }
+        .section.active { display: block; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: 0; } }
+
+        /* Tournament Card Styling */
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+        .t-card { background: var(--card); border: 1px solid #222; border-radius: 12px; padding: 20px; transition: 0.3s; position: relative; border-top: 4px solid var(--blue); }
+        .t-card:hover { transform: translateY(-5px); border-color: var(--blue); }
+        .t-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+        .badge { background: #000; padding: 4px 10px; border-radius: 5px; font-size: 0.7rem; font-weight: bold; border: 1px solid #333; color: var(--blue); text-transform: uppercase; }
+        .t-title { font-size: 1.1rem; margin: 10px 0; color: #fff; }
+        .t-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; color: var(--dim); margin-bottom: 15px; }
+        .prize-row { background: rgba(0,255,136,0.05); padding: 10px; border-radius: 8px; display: flex; justify-content: space-between; margin-bottom: 15px; border: 1px solid rgba(0,255,136,0.1); }
+        .prize-row b { color: var(--green); }
+
+        /* Wallet Section */
+        .plan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+        .plan-card { background: #0a0a0c; border: 1px solid #333; padding: 15px; text-align: center; border-radius: 10px; cursor: pointer; transition: 0.2s; font-weight: 700; }
+        .plan-card.selected { border-color: var(--blue); color: var(--blue); box-shadow: var(--neon); }
+        .note { color: var(--red); background: rgba(255, 0, 60, 0.1); padding: 15px; border-radius: 10px; font-size: 0.85rem; font-weight: bold; border-left: 5px solid var(--red); margin-bottom: 20px; }
+
+        /* Controls */
+        input, select { width: 100%; padding: 12px; margin-bottom: 15px; background: #000; border: 1px solid #333; color: #fff; border-radius: 6px; outline: none; }
+        .btn { padding: 12px 20px; border-radius: 6px; border: none; cursor: pointer; font-family: 'Orbitron'; font-weight: bold; text-transform: uppercase; display: inline-flex; align-items: center; justify-content: center; gap: 10px; transition: 0.3s; width: 100%; }
+        .btn-primary { background: var(--blue); color: #000; }
+        .btn-red { background: var(--red); color: #fff; }
+        .btn-outline { background: transparent; border: 1px solid var(--blue); color: var(--blue); }
+
+        /* Sidebars */
+        #notif-panel { position: fixed; top: 0; right: -350px; width: 320px; height: 100vh; background: var(--card); z-index: 1001; border-left: 1px solid #222; transition: 0.4s; padding: 25px; box-shadow: -10px 0 30px rgba(0,0,0,0.5); }
+        #notif-panel.active { right: 0; }
+        .notif-item { background: #0a0a0c; border: 1px solid #222; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 0.85rem; border-left: 3px solid var(--blue); }
+
+        @media (max-width: 768px) {
+            .sidebar { width: 100%; height: 70px; bottom: 0; top: auto; position: fixed; display: flex; flex-direction: row; border-right: none; border-top: 1px solid #222; padding: 5px; }
+            .sidebar .logo, .sidebar .u-info { display: none; }
+            .sidebar .nav-link { flex-direction: column; font-size: 0.6rem; padding: 5px; flex: 1; text-align: center; }
+            .main-content { margin-left: 0; padding: 20px 20px 100px 20px; }
+            #notif-panel { width: 100%; right: -100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. AUTH GATE -->
+    <div id="auth-overlay">
+        <div class="auth-box">
+            <h2 style="text-align: center; color: var(--blue); margin-bottom: 20px;">GUILD ZONE</h2>
+            <div class="auth-tabs">
+                <button id="l-tab" class="active" onclick="setAuthMode('login')">Login</button>
+                <button id="s-tab" onclick="setAuthMode('signup')">Signup</button>
+            </div>
+            <form id="auth-form">
+                <div id="signup-fields" style="display: none;">
+                    <input type="text" id="ign" placeholder="In-Game Name (IGN)">
+                    <select id="role"><option value="player">Player</option><option value="leader">Guild Leader</option></select>
+                </div>
+                <input type="email" id="email" placeholder="Email" required>
+                <input type="password" id="password" placeholder="Password" required>
+                <button type="submit" class="btn btn-primary" id="auth-btn">Enter Arena</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. MAIN APP -->
+    <div id="app-shell">
+        <aside class="sidebar">
+            <div class="logo" style="color: var(--blue); text-align: center; margin-bottom: 30px;"><h3>G-ZONE</h3></div>
+            <div class="u-info" style="margin-bottom: 20px; border-bottom: 1px solid #222; padding-bottom: 15px; padding-left: 10px;">
+                <p id="nav-ign" style="font-weight: 700; color:#fff; font-size: 1.1rem;"></p>
+                <p id="nav-role" style="color: var(--blue); font-size: 0.75rem; text-transform: uppercase; font-weight: bold;"></p>
+            </div>
+            <div class="nav-link active" onclick="nav('dash')"><i class="fas fa-th-large"></i> Home</div>
+            <div class="nav-link" onclick="nav('events')"><i class="fas fa-trophy"></i> Tournaments</div>
+            <div class="nav-link" onclick="nav('guilds')"><i class="fas fa-users"></i> Guilds</div>
+            <div class="nav-link" onclick="nav('wallet')"><i class="fas fa-wallet"></i> Wallet</div>
+            <div class="nav-link" onclick="firebase.auth().signOut()" style="color: var(--red); margin-top: auto;"><i class="fas fa-power-off"></i> Logout</div>
+        </aside>
+
+        <main class="main-content">
+            <div class="header">
+                <h2 id="page-title">Dashboard</h2>
+                <div class="header-actions">
+                    <div class="notif-btn" onclick="toggleNotif(true)"><i class="fas fa-bell"></i><div id="notif-badge" class="notif-badge">0</div></div>
+                    <div class="coins-box"><i class="fas fa-coins"></i> <span id="coin-bal">0</span></div>
+                </div>
+            </div>
+
+            <!-- Notifications Sidebar -->
+            <div id="notif-panel">
+                <div style="display:flex; justify-content:space-between; align-items:center;"><h3>Notifications</h3><i class="fas fa-times" style="cursor:pointer" onclick="toggleNotif(false)"></i></div>
+                <div id="notif-list" style="margin-top:20px; overflow-y:auto; height: calc(100% - 60px);"></div>
+            </div>
+
+            <!-- DASHBOARD: GUILD LEADER PANEL -->
+            <section id="sect-dash" class="section active">
+                <div id="my-guild-box" class="card" style="display:none; border-color:var(--blue);">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h3>Manage Guild: <span id="my-guild-name" style="color:#fff"></span></h3>
+                    </div>
+                    <div id="members-list" style="margin-top:20px;"></div>
+                </div>
+                <h3>Ongoing Tournaments</h3>
+                <div id="dash-list" class="card-grid" style="margin-top:20px;"></div>
+            </section>
+
+            <!-- EVENTS SECTION -->
+            <section id="sect-events" class="section">
+                <div id="events-list" class="card-grid"></div>
+            </section>
+
+            <!-- GUILDS SECTION -->
+            <section id="sect-guilds" class="section">
+                <div id="create-guild-container" style="display:none; margin-bottom: 20px;">
+                    <button class="btn btn-primary" style="width:auto" onclick="openCreateGuild()">+ Register My Guild</button>
+                </div>
+                <div id="guild-directory" class="card-grid"></div>
+            </section>
+
+            <!-- WALLET SECTION -->
+            <section id="sect-wallet" class="section">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+                    <!-- Topup -->
+                    <div class="card">
+                        <h3>Deposit Coins</h3>
+                        <div class="note">NOTE: Uploading fake or incorrect screenshots will lead to an immediate account decline.</div>
+                        <div style="background:#fff; padding:10px; border-radius:12px; width:fit-content; margin:0 auto 15px; border:3px solid var(--blue);">
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa=ujjwalraj738@okhdfcbank&pn=ujjwal%20Raj&cu=INR" style="width:200px; display:block;">
+                        </div>
+                        <div style="text-align:center; background:#000; padding:10px; border:1px dashed var(--blue); margin-bottom:20px; border-radius:8px;">
+                            <small style="color:var(--dim)">ADMIN UPI ID</small><br><b>ujjwalraj738@okhdfcbank</b>
+                        </div>
+                        <div class="plan-grid">
+                            <div class="plan-card" onclick="selectPlan(20, 45)">₹20 = 45 Coins</div>
+                            <div class="plan-card" onclick="selectPlan(50, 150)">₹50 = 150 Coins</div>
+                            <div class="plan-card" onclick="selectPlan(100, 300)">₹100 = 300 Coins</div>
+                            <div class="plan-card" onclick="selectPlan(200, 700)">₹200 = 700 Coins</div>
+                        </div>
+                        <form id="topup-form">
+                            <input type="hidden" id="selected-amt">
+                            <p id="sel-info" style="color:var(--blue); font-weight:bold; text-align:center; margin-bottom:10px;"></p>
+                            <input type="file" id="proof-file" accept="image/*" required>
+                            <button type="submit" id="t-submit" class="btn btn-primary">Send Payment Proof</button>
+                        </form>
+                    </div>
+                    <!-- Withdraw -->
+                    <div class="card" style="border-top:4px solid var(--red)">
+                        <h3>Withdraw Funds</h3>
+                        <p style="color:var(--dim); font-size:0.85rem; margin-bottom:15px;">Rate: 5 Coins = ₹1 INR</p>
+                        <input type="number" id="w-val" placeholder="Amount of Coins" oninput="calcW(this.value)">
+                        <p id="w-preview" style="color:var(--blue); font-weight:bold; margin-bottom:15px;">You receive: ₹0.00</p>
+                        <input type="text" id="w-upi" placeholder="Your UPI ID (Name@upi)">
+                        <button class="btn btn-red" onclick="handleWithdrawal()">Request Withdrawal</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Script Block -->
+    <script>
+        // 1. INITIALIZE FIREBASE (MUST BE TOP)
+        const firebaseConfig = {
+            apiKey: "AIzaSyAR5p2G_eZsVIR4C6a1eGatmGjERXguzVc",
+            authDomain: "guild-zone-e3509.firebaseapp.com",
+            projectId: "guild-zone-e3509",
+            storageBucket: "guild-zone-e3509.firebasestorage.app",
+            messagingSenderId: "205602044671",
+            appId: "1:205602044671:web:e01f3e5f2cc10ddddbeaca",
+            measurementId: "G-6PM8LZ7FJR"
+        };
+        const IMGBB_KEY = "b518d2881029e5c3b4ae1324a7bc0f02";
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // 2. STATE
+        let me = null;
+        let mode = 'login';
+        let userGuildId = null;
+
+        // 3. AUTH LOGIC
+        function setAuthMode(m) {
+            mode = m;
+            document.getElementById('l-tab').className = m==='login'?'active':'';
+            document.getElementById('s-tab').className = m==='signup'?'active':'';
+            document.getElementById('signup-fields').style.display = m==='signup'?'block':'none';
+        }
+
+        document.getElementById('auth-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('auth-btn'); btn.disabled = true;
+            const email = document.getElementById('email').value;
+            const pass = document.getElementById('password').value;
+            
+            try {
+                if(mode === 'signup') {
+                    const ign = document.getElementById('ign').value;
+                    const role = document.getElementById('role').value;
+                    if(!ign) throw new Error("IGN required");
+                    const res = await auth.createUserWithEmailAndPassword(email, pass);
+                    await db.collection('users').doc(res.user.uid).set({
+                        uid: res.user.uid, ign, role, email, coins: 0, createdAt: new Date()
+                    });
+                } else {
+                    await auth.signInWithEmailAndPassword(email, pass);
+                }
+            } catch (err) { alert(err.message); btn.disabled = false; }
+        });
+
+        auth.onAuthStateChanged(u => {
+            if(u) {
+                db.collection('users').doc(u.uid).onSnapshot(doc => {
+                    if(doc.exists) {
+                        me = doc.data();
+                        document.getElementById('auth-overlay').style.display='none';
+                        document.getElementById('app-shell').style.display='block';
+                        document.getElementById('nav-ign').innerText = me.ign;
+                        document.getElementById('nav-role').innerText = me.role;
+                        document.getElementById('coin-bal').innerText = me.coins;
+                        loadDashboardData();
+                        listenNotifications();
+                    }
+                });
+            } else {
+                document.getElementById('app-shell').style.display='none';
+                document.getElementById('auth-overlay').style.display='flex';
+            }
+        });
+
+        // 4. NAVIGATION
+        function nav(id) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.getElementById('sect-' + id).classList.add('active');
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            document.getElementById('page-title').innerText = id.toUpperCase();
+        }
+
+        // 5. DATA FETCHING (Realtime)
+        function loadDashboardData() {
+            // Fetch Tournaments with Mode, Type, Prizes
+            db.collection('tournaments').orderBy('createdAt','desc').onSnapshot(snap => {
+                const dash = document.getElementById('dash-list');
+                const list = document.getElementById('events-list');
+                dash.innerHTML = ''; list.innerHTML = '';
+                
+                snap.forEach(doc => {
+                    const t = doc.data();
+                    const card = createTourneyCard(doc.id, t);
+                    list.appendChild(card.cloneNode(true));
+                    if(dash.children.length < 3) dash.appendChild(card);
+                });
+            });
+
+            // Fetch Guilds
+            db.collection('guilds').onSnapshot(snap => {
+                const dir = document.getElementById('guild-directory');
+                const mgmtBox = document.getElementById('my-guild-box');
+                const memList = document.getElementById('members-list');
+                dir.innerHTML = ''; userGuildId = null;
+                
+                snap.forEach(doc => {
+                    const g = doc.data();
+                    const isMyGuild = g.leaderUid === me.uid;
+                    
+                    if(isMyGuild) {
+                        userGuildId = doc.id;
+                        mgmtBox.style.display = 'block';
+                        document.getElementById('my-guild-name').innerText = g.name;
+                        memList.innerHTML = '';
+                        (g.members || []).forEach(mId => {
+                            const row = document.createElement('div');
+                            row.style = "display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #222;";
+                            row.innerHTML = `<span>UID: ${mId.substring(0,8)}...</span> ${mId !== me.uid ? `<button class="btn btn-red" style="padding:4px 8px; width:auto; font-size:0.7rem;" onclick="kick('${doc.id}', '${mId}')">Kick</button>` : '<b>LEADER</b>'}`;
+                            memList.appendChild(row);
+                        });
+                    }
+
+                    dir.innerHTML += `
+                        <div class="card">
+                            <h3>${g.name}</h3>
+                            <p style="color:var(--dim); font-size:0.85rem">Commander: ${g.leaderIgn}</p>
+                            <div style="display:flex; gap:10px; margin-top:15px;">
+                                <button class="btn btn-outline" style="flex:1" onclick="joinGuild('${doc.id}')">${(g.members || []).includes(me.uid)?'MEMBER':'JOIN'}</button>
+                                ${me.role === 'leader' && !isMyGuild ? `<button class="btn btn-red" onclick="challenge('${doc.id}','${g.name}')">Declare War</button>` : ''}
+                            </div>
+                        </div>`;
+                });
+
+                document.getElementById('create-guild-container').style.display = (me.role==='leader' && !userGuildId) ? 'block' : 'none';
+            });
+        }
+
+        function createTourneyCard(id, t) {
+            const div = document.createElement('div'); div.className = 't-card';
+            const joined = (t.participants || []).includes(me.uid);
+            const isVisible = new Date().getTime() >= (t.showIdPassTime ? new Date(t.showIdPassTime).getTime() : 0);
+            
+            div.innerHTML = `
+                <div class="t-header"><span class="badge">${t.mode}</span><span class="badge" style="border-color:var(--neon);">${t.type}</span></div>
+                <h3 class="t-title">${t.title}</h3>
+                <div class="t-meta">
+                    <div><i class="far fa-calendar"></i> ${new Date(t.dateTime).toLocaleString()}</div>
+                    <div style="color:var(--red)"><i class="fas fa-users"></i> Slots: ${t.totalSlots - (t.joinedCount || 0)}</div>
+                </div>
+                <div class="prize-row"><span>WIN: <b>${t.winPrize} C</b></span><span>KILL: <b>${t.killPrize} C</b></span></div>
+                <div style="color:var(--blue); font-weight:700; margin-bottom:15px;">ENTRY FEE: ${t.entryCoins} COINS</div>
+                ${joined ? (isVisible ? `<div style="background:#000; border:1px dashed var(--blue); padding:10px; text-align:center;"><small>MATCH ACCESS</small><p>ID: ${t.matchId}<br>PASS: ${t.matchPassword}</p></div>` : `<button class="btn btn-outline" disabled>READY (ID @ LIVE)</button>`) : 
+                `<button class="btn btn-primary" onclick="handleJoinT('${id}', ${t.entryCoins})">JOIN NOW</button>`}
+            `;
+            return div;
+        }
+
+        // 6. CORE ACTIONS
+        async function handleJoinT(id, fee) {
+            if(me.coins < fee) return alert("Not enough coins!");
+            if(!confirm("Join this Tournament?")) return;
+            try {
+                await db.runTransaction(async (t) => {
+                    const uRef = db.collection('users').doc(me.uid);
+                    const tRef = db.collection('tournaments').doc(id);
+                    const us = await t.get(uRef);
+                    const ts = await t.get(tRef);
+                    if(ts.data().joinedCount >= ts.data().totalSlots) throw "Match is Full!";
+                    if((ts.data().participants || []).includes(me.uid)) throw "Already joined!";
+                    
+                    t.update(uRef, { coins: us.data().coins - fee });
+                    t.update(tRef, { joinedCount: firebase.firestore.FieldValue.increment(1), participants: firebase.firestore.FieldValue.arrayUnion(me.uid) });
+                });
+                alert("Match Secured! Wait for ID/Pass Visibility time.");
+            } catch (e) { alert(e); }
+        }
+
+        async function joinGuild(gid) {
+            if(confirm("Confirm Membership?")) {
+                await db.collection('guilds').doc(gid).update({ members: firebase.firestore.FieldValue.arrayUnion(me.uid) });
+                alert("Welcome aboard!");
+            }
+        }
+
+        async function openCreateGuild() {
+            const name = prompt("Enter Guild Name:");
+            if(name) {
+                await db.collection('guilds').add({
+                    name: name, leaderUid: me.uid, leaderIgn: me.ign, members: [me.uid], createdAt: new Date()
+                });
+            }
+        }
+
+        async function kick(gid, pid) {
+            if(confirm("Kick this player?")) await db.collection('guilds').doc(gid).update({ members: firebase.firestore.FieldValue.arrayRemove(pid) });
+        }
+
+        async function challenge(tid, name) {
+            if(me.coins < 50) return alert("50 Coins required for war!");
+            if(confirm(`War declared on ${name}? (Cost: 50C)`)) {
+                await db.runTransaction(async (t) => {
+                    const us = await t.get(db.collection('users').doc(me.uid));
+                    t.update(db.collection('users').doc(me.uid), { coins: us.data().coins - 50 });
+                    const cRef = db.collection('challenges').doc();
+                    t.set(cRef, { from: me.uid, fromIgn: me.ign, target: tid, targetName: name, status: 'pending', createdAt: new Date() });
+                });
+                alert("Challenge issued to " + name);
+            }
+        }
+
+        // 7. WALLET & WITHDRAWAL
+        function selectPlan(amt, c) {
+            document.querySelectorAll('.plan-card').forEach(p => p.classList.remove('selected'));
+            event.currentTarget.classList.add('selected');
+            document.getElementById('selected-amt').value = amt;
+            document.getElementById('sel-info').innerText = `SELECTED: ₹${amt} = ${c} COINS`;
+        }
+
+        function calcW(c) { document.getElementById('w-preview').innerText = `You receive: ₹${(c/5).toFixed(2)}`; }
+
+        async function handleWithdrawal() {
+            const val = Number(document.getElementById('w-val').value);
+            const upi = document.getElementById('w-upi').value;
+            if(val < 50 || !upi || me.coins < val) return alert("Invalid inputs or Balance (Min 50C)");
+            
+            try {
+                await db.runTransaction(async (t) => {
+                    const uRef = db.collection('users').doc(me.uid);
+                    t.update(uRef, { coins: me.coins - val });
+                    const wRef = db.collection('withdraw_requests').doc();
+                    t.set(wRef, { uid: me.uid, email: me.email, coins: val, inr: (val/5), upi, status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+                });
+                alert("Request filed! Wait for admin processing.");
+                document.getElementById('w-val').value = '';
+            } catch (e) { alert(e); }
+        }
+
+        document.getElementById('topup-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const amt = document.getElementById('selected-amt').value; if(!amt) return alert("Select Plan");
+            const btn = document.getElementById('t-submit'); btn.disabled = true; btn.innerText = "Authorizing...";
+
+            try {
+                const fd = new FormData(); fd.append('image', document.getElementById('proof-file').files[0]);
+                const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd });
+                const json = await res.json();
+                if(!json.success) throw new Error("Upload Failed");
+
+                await db.collection('topup_requests').add({
+                    uid: me.uid, email: me.email, amount: Number(amt), proofImageURL: json.data.url, status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                alert("Evidence Sent! Deposit in progress."); e.target.reset();
+            } catch (err) { alert(err.message); } finally { btn.disabled = false; btn.innerText = "Send Payment Proof"; }
+        });
+
+        // 8. NOTIFICATIONS
+        function toggleNotif(s) { document.getElementById('notif-panel').classList.toggle('active', s); }
+        function listenNotifications() {
+            db.collection('notifications').where('uid','==',me.uid).orderBy('timestamp','desc').onSnapshot(s => {
+                const list = document.getElementById('notif-list'); const badge = document.getElementById('notif-badge');
+                list.innerHTML = ''; let count = 0;
+                s.forEach(doc => { 
+                    const n = doc.data(); if(!n.read) count++;
+                    list.innerHTML += `<div class="notif-item">${n.message}</div>`; 
+                });
+                badge.style.display = count > 0 ? 'flex' : 'none'; badge.innerText = count;
+                if(s.empty) list.innerHTML = `<p style="text-align:center; color:var(--dim); margin-top:20px;">No alerts recorded.</p>`;
+            });
+        }
+    </script>
+</body>
+</html>

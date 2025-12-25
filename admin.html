@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GZ ADMIN | Command Console</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --bg: #050505; --sidebar: #0a0a0c; --card: #111114; --accent: #00f2ff; --red: #ff003c; --green: #00ff88; --text: #e0e0e0; --border: #222; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Rajdhani', sans-serif; }
+        body { background: var(--bg); color: var(--text); overflow-x: hidden; }
+        h1, h2, h3, .logo { font-family: 'Orbitron'; text-transform: uppercase; }
+        #auth-gate { position: fixed; inset: 0; background: var(--bg); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .login-box { background: var(--card); padding: 2.5rem; border-radius: 12px; border: 1px solid var(--accent); width: 380px; text-align: center; }
+        #admin-panel { display: none; min-height: 100vh; }
+        .sidebar { width: 260px; height: 100vh; background: var(--sidebar); position: fixed; padding: 2rem 1rem; border-right: 1px solid var(--border); }
+        .main-content { margin-left: 260px; padding: 2.5rem; }
+        .nav-item { padding: 15px; display: flex; align-items: center; gap: 12px; cursor: pointer; color: #888; border-radius: 8px; margin-bottom: 5px; transition: 0.3s; }
+        .nav-item:hover, .nav-item.active { background: #1a1a1f; color: var(--accent); }
+        .table-wrap { background: var(--card); border-radius: 10px; border: 1px solid var(--border); overflow-x: auto; margin-top: 15px; }
+        table { width: 100%; border-collapse: collapse; text-align: left; min-width: 1000px; }
+        th { background: #1a1a1f; padding: 15px; color: #888; text-transform: uppercase; font-size: 0.75rem; }
+        td { padding: 15px; border-top: 1px solid var(--border); font-size: 0.9rem; }
+        input, select, textarea { width: 100%; padding: 12px; margin-bottom: 15px; background: #000; border: 1px solid #333; color: #fff; border-radius: 5px; outline: none; }
+        label { font-size: 0.75rem; color: var(--accent); display: block; margin-bottom: 5px; }
+        .btn { padding: 10px 18px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; text-transform: uppercase; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-primary { background: var(--accent); color: #000; }
+        .btn-green { background: var(--green); color: #000; }
+        .btn-red { background: var(--red); color: #fff; }
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; overflow-y: auto; }
+        .modal-content { background: var(--card); padding: 2rem; border-radius: 12px; width: 100%; max-width: 600px; border: 1px solid var(--accent); }
+        .section { display: none; }
+        .section.active { display: block; animation: fadeIn 0.4s; }
+        @keyframes fadeIn { from { opacity:0; transform: translateY(5px); } to { opacity:1; transform: 0; } }
+    </style>
+</head>
+<body>
+    <div id="auth-gate"><div class="login-box"><h2>GZ ADMIN</h2><input type="email" id="email" placeholder="Email"><input type="password" id="password" placeholder="Password"><button class="btn btn-primary" style="width:100%; justify-content:center" onclick="handleLogin()">Authorize</button></div></div>
+    <div id="admin-panel">
+        <aside class="sidebar">
+            <h2 style="color:var(--accent); text-align:center; margin-bottom:40px;">CONTROL</h2>
+            <div class="nav-item active" onclick="showTab('home')">Overview</div>
+            <div class="nav-item" onclick="showTab('topups')">Deposits</div>
+            <div class="nav-item" onclick="showTab('withdrawals')">Withdrawals</div>
+            <div class="nav-item" onclick="showTab('tournaments')">Tournaments</div>
+            <div class="nav-item" onclick="showTab('broadcast')">Broadcast</div>
+            <div class="nav-item" onclick="logout()" style="margin-top:40px; color:var(--red)">Logout</div>
+        </aside>
+        <main class="main-content">
+            <section id="home-sec" class="section active">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:20px;">
+                    <div style="background:var(--card); padding:20px; border-left:4px solid var(--accent);"><h4>USERS</h4><h2 id="s-users">0</h2></div>
+                    <div style="background:var(--card); padding:20px; border-left:4px solid var(--green);"><h4>DEPOSITS</h4><h2 id="s-dep">0</h2></div>
+                </div>
+            </section>
+            
+            <!-- BROADCAST FIXED -->
+            <section id="broadcast-sec" class="section">
+                <h2>Global Alert System</h2>
+                <div style="background:var(--card); padding:25px; margin-top:20px; border-radius:12px;">
+                    <textarea id="bc-msg" rows="4" placeholder="Enter message for all players..."></textarea>
+                    <button class="btn btn-primary" onclick="broadcastAll()">Launch Broadcast</button>
+                </div>
+            </section>
+
+            <!-- TOURNAMENTS WITH NEW OPTIONS -->
+            <section id="tournaments-sec" class="section">
+                <div style="display:flex; justify-content:space-between"><h2>Manage Events</h2><button class="btn btn-green" onclick="toggleModal('t-modal', true)">+ Add Match</button></div>
+                <div class="table-wrap"><table><thead><tr><th>Match Title</th><th>Fee/Type</th><th>Date/Mode</th><th>Slots</th><th>Action</th></tr></thead><tbody id="t-list"></tbody></table></div>
+            </section>
+
+            <!-- WALLET LOGIC -->
+            <section id="topups-sec" class="section"><h2>Pending Topups</h2><div class="table-wrap"><table><thead><tr><th>User</th><th>INR</th><th>Coins Due</th><th>Action</th></tr></thead><tbody id="top-list"></tbody></table></div></section>
+            <section id="withdrawals-sec" class="section"><h2>Pending Withdrawals</h2><div class="table-wrap"><table><thead><tr><th>User</th><th>Coins</th><th>UPI</th><th>Action</th></tr></thead><tbody id="wit-list"></tbody></table></div></section>
+        </main>
+    </div>
+
+    <!-- Tournament Modal -->
+    <div class="modal" id="t-modal">
+        <div class="modal-content">
+            <h3>Tournament Blueprint</h3><br>
+            <label>Match Title</label><input type="text" id="m-title" placeholder="Pro Squad Battle">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px">
+                <div><label>Mode</label><select id="m-mode"><option value="Battle Royale">BR Mode</option><option value="Clash Squad">CS Mode</option></select></div>
+                <div><label>Team Type</label><select id="m-type"><option value="Solo">Solo</option><option value="Duo">Duo</option><option value="Squad">Squad</option></select></div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px">
+                <div><label>Entry Coins</label><input type="number" id="m-entry"></div>
+                <div><label>Total Slots</label><input type="number" id="m-slots"></div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px">
+                <div><label>Winnings (Coins)</label><input type="number" id="m-win"></div>
+                <div><label>Per Kill (Coins)</label><input type="number" id="m-kill"></div>
+            </div>
+            <label>Date & Time</label><input type="datetime-local" id="m-date">
+            <label>Show ID/Pass At (Visibility Time)</label><input type="datetime-local" id="m-vis">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px">
+                <div><label>Match ID</label><input type="text" id="m-mid"></div>
+                <div><label>Match Password</label><input type="text" id="m-mpass"></div>
+            </div>
+            <label>Rules</label><textarea id="m-rules"></textarea>
+            <button class="btn btn-primary" onclick="publishT()" style="width:100%; justify-content:center">Deploy Event</button>
+            <button class="btn btn-red" onclick="toggleModal('t-modal', false)" style="width:100%; margin-top:10px; justify-content:center">Close</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = { apiKey: "AIzaSyAR5p2G_eZsVIR4C6a1eGatmGjERXguzVc", authDomain: "guild-zone-e3509.firebaseapp.com", projectId: "guild-zone-e3509", storageBucket: "guild-zone-e3509.firebasestorage.app", messagingSenderId: "205602044671", appId: "1:205602044671:web:e01f3e5f2cc10ddddbeaca", measurementId: "G-6PM8LZ7FJR" };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth(); const db = firebase.firestore();
+        const DEP_RATES = { "20": 45, "50": 150, "100": 300, "200": 700 };
+
+        async function handleLogin() { 
+            try { 
+                const res = await auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value); 
+                const adm = await db.collection('admins').doc(res.user.uid).get();
+                if(adm.exists) { location.reload(); } else { alert("Blocked"); auth.signOut(); }
+            } catch(e) { alert(e.message); } 
+        }
+
+        auth.onAuthStateChanged(u => { if(u) { db.collection('admins').doc(u.uid).get().then(s => { if(s.exists) { document.getElementById('auth-gate').style.display='none'; document.getElementById('admin-panel').style.display='block'; loadCore(); } }); } });
+        function logout() { auth.signOut(); location.reload(); }
+
+        function loadCore() {
+            db.collection('users').onSnapshot(s => document.getElementById('s-users').innerText = s.size);
+            db.collection('topup_requests').where('status','==','pending').onSnapshot(s => { 
+                document.getElementById('s-dep').innerText = s.size;
+                const list = document.getElementById('top-list'); list.innerHTML = '';
+                s.forEach(doc => { const r = doc.data(); const coins = DEP_RATES[r.amount] || r.amount * 2.5; list.innerHTML += `<tr><td>${r.email}</td><td>₹${r.amount}</td><td>${coins}</td><td><button class="btn btn-green" onclick="appT('${doc.id}','${r.uid}',${coins})">Check</button></td></tr>`; });
+            });
+            db.collection('withdraw_requests').where('status','==','pending').onSnapshot(s => {
+                const l = document.getElementById('wit-list'); l.innerHTML = '';
+                s.forEach(doc => { const w = doc.data(); l.innerHTML += `<tr><td>${w.email}</td><td>₹${w.inr}</td><td>${w.upi}</td><td><button class="btn btn-green" onclick="appW('${doc.id}')">Paid</button></td></tr>`; });
+            });
+            db.collection('tournaments').orderBy('createdAt','desc').onSnapshot(s => {
+                const l = document.getElementById('t-list'); l.innerHTML = '';
+                s.forEach(doc => { const t = doc.data(); l.innerHTML += `<tr><td>${t.title}</td><td>${t.entryCoins} Coins / ${t.type}</td><td>${new Date(t.dateTime).toLocaleString()} / ${t.mode}</td><td>${t.joinedCount || 0}/${t.totalSlots}</td><td><button class="btn btn-red" onclick="deleteT('${doc.id}')">Del</button></td></tr>`; });
+            });
+        }
+
+        async function broadcastAll() {
+            const m = document.getElementById('bc-msg').value; if(!m) return;
+            const users = await db.collection('users').get();
+            const batch = db.batch();
+            users.forEach(u => { batch.set(db.collection('notifications').doc(), { uid: u.id, message: m, timestamp: firebase.firestore.FieldValue.serverTimestamp(), read: false }); });
+            await batch.commit(); alert("Done!"); document.getElementById('bc-msg').value = '';
+        }
+
+        async function publishT() {
+            const data = { 
+                title: document.getElementById('m-title').value,
+                mode: document.getElementById('m-mode').value,
+                type: document.getElementById('m-type').value,
+                entryCoins: Number(document.getElementById('m-entry').value),
+                totalSlots: Number(document.getElementById('m-slots').value),
+                winPrize: Number(document.getElementById('m-win').value),
+                killPrize: Number(document.getElementById('m-kill').value),
+                dateTime: document.getElementById('m-date').value,
+                showIdPassTime: document.getElementById('m-vis').value,
+                matchId: document.getElementById('m-mid').value,
+                matchPassword: document.getElementById('m-mpass').value,
+                rules: document.getElementById('m-rules').value,
+                joinedCount: 0, participants: [], createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            await db.collection('tournaments').add(data); toggleModal('t-modal', false);
+        }
+
+        async function appT(rid, uid, coins) {
+            await db.runTransaction(async (t) => {
+                const uDoc = await t.get(db.collection('users').doc(uid));
+                t.update(db.collection('users').doc(uid), { coins: (uDoc.data().coins || 0) + coins });
+                t.update(db.collection('topup_requests').doc(rid), { status: 'approved' });
+                t.set(db.collection('notifications').doc(), { uid, message: `Payment Approved! ${coins} coins added.`, timestamp: firebase.firestore.FieldValue.serverTimestamp(), read: false });
+            });
+            alert("Approved!");
+        }
+
+        function toggleModal(id, s) { document.getElementById(id).style.display = s ? 'flex' : 'none'; }
+        function deleteT(id) { if(confirm("Del?")) db.collection('tournaments').doc(id).delete(); }
+        function showTab(id) { document.querySelectorAll('.section').forEach(s => s.classList.remove('active')); document.getElementById(id + '-sec').classList.add('active'); }
+    </script>
+</body>
+</html>
